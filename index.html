@@ -118,6 +118,12 @@
   <p>
     联系我：<a href="mailto:you@example.com">you@example.com</a>
   </p>
+  <hr>
+
+  <div class="coin-box" id="coinBox">
+      <div class="coin-result" id="coinResult">🪙</div>
+      <div class="coin-text">赛博抛硬币</div>
+    </div>
 
   <hr>
 
@@ -193,6 +199,21 @@ Since November 7th, 2026
 
   
   quoteBoxEl.addEventListener('click', changeQuote);
+
+  const coinBox = document.getElementById('coinBox');
+  const coinResult = document.getElementById('coinResult');
+
+  coinBox.addEventListener('click', () => {
+    let count = 0;
+    const interval = setInterval(() => {
+      coinResult.textContent = Math.random() > 0.5 ? '正' : '反';
+      count++;
+      if (count > 5) {
+        clearInterval(interval);
+        coinResult.textContent = Math.random() > 0.5 ? '正面 🪙' : '反面 🪙';
+      }
+    }, 50);
+  });
 </script>
 </body>
 </html>
