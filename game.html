@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>赛博抓虫 - Catch the Bug</title>
+<style>
+  body {
+    margin: 0;
+    padding: 20px;
+    font-family: system-ui, -apple-system, sans-serif;
+    background-color: #ffffff;
+    color: #222;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    user-select: none;
+  }
+
+  h1 { font-size: 24px; margin-bottom: 5px; }
+  p.subtitle { color: #666; font-size: 14px; margin-top: 0; margin-bottom: 20px; }
+
+  .game-board {
+    width: 100%;
+    max-width: 600px;
+    height: 400px;
+    border: 2px dashed #ccc;
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+    background-color: #fafafa;
+  }
+
+  /* 计分板 */
+  .hud {
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 10px;
+  }
+
+  /* 虫子 */
+  .bug {
+    position: absolute;
+    font-size: 36px;
+    cursor: pointer;
+    transition: transform 0.1s;
+    display: none; /* 默认隐藏 */
+    line-height: 1;
+  }
+
+  .bug:active {
+    transform: scale(0.8);
+  }
+
+  /* 按钮 */
+  button {
+    padding: 10px 24px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #fff;
+    background-color: #222;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-top: 20px;
+  }
+
+  button:hover {
+    background-color: #444;
+  }
+
+  /* 结束遮罩 */
+  .overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  
+  .overlay.hidden {
+    display: none;
+  }
+
+  .overlay h2 { font-size: 28px; margin: 0 0 10px 0; }
+  .overlay p { font-size: 18px; margin: 0 0 20px 0; }
+</style>
+</head>
+<body>
+
+  <h1>赛博抓虫 🐛</h1>
+  <p class="subtitle">15秒内点中尽可能多的 Bug，点击开始。</p>
+
+  <div class="hud">
+    <span>得分: <span id="score">0</span></span>
+    <span>剩余时间: <span id="time">15</span>s</span>
+  </div>
+
+  <div class="game-board" id="board">
+    <div class="bug" id="bug">🐛</div>
+    
+    <!-- 开始/结束界面 -->
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">准备就绪</h2>
+      <p id="overlayDesc">抓虫大挑战，手快有手慢无</p>
+      <button id="startBtn">开始游戏</button>
+    </div>
+  </div>
+
+  <script>
+    const board = document.getElementById('board');
+    const bug = document.getElementById('bug');
+    const scoreDisplay = document.getElementById('score');
+    const timeDisplay = document.getElementById('time');
+    const overlay = document.getElementById('overlay');
+    const overlayTitle = document.getElementById('overlayTitle');
+    const overlayDesc = document.getElementById('overlayDesc');
+    const startBtn = document.getElementById('startBtn');
+
+    let score = 0;
+    let timeLeft = 15;
+    let isPlaying = false;
+    let gameTimer;
+
+    // 随机移动虫子
+    function moveBug() {
+      if (!isPlaying) return;
+      
+      const boardRect = board.getBoundingClientRect();
+      const bugSize = 36; // 大概的虫子大小
+      
+      // 计算可用空间，确保虫子不会跑出框外
+      const maxX = boardRect.width - bugSize;
+      const maxY = boardRect.height - bugSize;
+      
+      // 随机生成位置
+      const randomX = Math.floor(Math.random() * maxX);
+      const randomY = Math.floor(Math.random() * maxY);
+      
+      bug.style.left = randomX + 'px';
+      bug.style.top = randomY + 'px';
+    }
+
+    // 点击虫子
+    bug.addEventListener('mousedown', (e) => {
+      if (!isPlaying) return;
+      // 阻止事件冒泡（防止点虫子的时候触发了其他事件）
+      e.preventDefault();
+      
+      score++;
+      scoreDisplay.textContent = score;
+      
+      // 加一点微小的动画反馈
+      bug.style.transform = 'scale(1.5)';
+      setTimeout(() => { bug.style.transform = 'scale(1)'; }, 100);
+      
+      moveBug();
+    });
+
+    // 开始游戏
+    function startGame() {
+      isPlaying = true;
+      score = 0;
+      timeLeft = 15;
+      scoreDisplay.textContent = score;
+      timeDisplay.textContent = timeLeft;
+      
+      overlay.classList.add('hidden');
+      bug.style.display = 'block';
+      moveBug();
+
+      // 倒计时
+      gameTimer = setInterval(() => {
+        timeLeft--;
+        timeDisplay.textContent = timeLeft;
+        
+        if (timeLeft <= 0) {
+          endGame();
+        }
+      }, 1000);
+    }
+
+    // 结束游戏
+    function endGame() {
+      isPlaying = false;
+      clearInterval(gameTimer);
+      bug.style.display = 'none';
+      
+      overlay.classList.remove('hidden');
+      overlayTitle.textContent = '游戏结束';
+      
+      if (score < 5) {
+        overlayDesc.textContent = `太慢了！得分 ${score}，你真的在写代码吗？`;
+      } else if (score < 12) {
+        overlayDesc.textContent = `手速一般！得分 ${score}，算个及格程序员。`;
+      } else {
+        overlayDesc.textContent = `单身二十年手速！得分 ${score}，Bug 看到你都害怕。`;
+      }
+      
+      startBtn.textContent = '再抓一次';
+    }
+
+    // 绑定开始按钮
+    startBtn.addEventListener('click', startGame);
+    
+    // 移动端防双击缩放
+    board.addEventListener('touchstart', (e) => {
+      if (e.target === bug) {
+        // 移动端点击虫子
+        e.preventDefault();
+        if (!isPlaying) return;
+        score++;
+        scoreDisplay.textContent = score;
+        moveBug();
+      }
+    }, { passive: false });
+
+  </script>
+</body>
+</html>
