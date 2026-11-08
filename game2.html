@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>混乱弹窗</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%; margin: 0; overflow: hidden;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: radial-gradient(circle at 30% 15%, #1e2b3d 0%, #10141c 55%, #06080c 100%);
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(90,140,220,.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(90,140,220,.07) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(circle at 50% 40%, #000 0%, transparent 85%);
+    -webkit-mask-image: radial-gradient(circle at 50% 40%, #000 0%, transparent 85%);
+  }
+
+  #desktop { position: fixed; inset: 0; }
+
+  /* ===== 窗口基础 ===== */
+  .window {
+    position: absolute;
+    border-radius: 7px;
+    overflow: hidden;
+    font-size: 13px;
+    animation: pop .17s cubic-bezier(.18,1.4,.5,1);
+    will-change: transform, opacity;
+  }
+  .window.dying { animation: vanish .2s ease-out forwards; pointer-events: none; }
+  @keyframes pop { from { opacity:0; transform:scale(.82); } to { opacity:1; transform:scale(1); } }
+  @keyframes vanish { to { opacity:0; transform:scale(.9) translateY(8px); } }
+
+  .close {
+    flex: 0 0 auto;
+    width: 19px; height: 19px; padding: 0;
+    display: grid; place-items: center;
+    border: none; border-radius: 4px;
+    background: rgba(255,255,255,.16);
+    color: #fff; font-size: 11px; line-height: 1;
+    font-family: inherit; cursor: pointer;
+    transition: background .12s;
+  }
+  .close:hover { background: #e81123; }
+
+  /* ===== 系统报错窗口 ===== */
+  .window.err {
+    width: min(272px, 82vw);
+    background: #e9e9ec;
+    color: #14161a;
+    box-shadow: 0 14px 34px rgba(0,0,0,.55),
+                0 0 0 1px rgba(255,255,255,.45) inset,
+                0 0 0 1px rgba(0,0,0,.25);
+  }
+  .titlebar {
+    display: flex; align-items: center; gap: 7px;
+    padding: 4px 6px 4px 8px;
+    background: linear-gradient(180deg, #3f86e6, #0b3d91);
+    color: #fff; font-size: 12px; font-weight: 600;
+    letter-spacing: .3px;
+  }
+  .titlebar .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff5f57; box-shadow: 0 0 7px #ff5f57; flex: 0 0 auto; }
+  .titlebar .ttl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .content { display: flex; gap: 10px; padding: 13px 13px 4px; }
+  .icon {
+    flex: 0 0 30px; width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(180deg,#f4614f,#c0271d);
+    color: #fff; font-size: 16px; font-weight: 800;
+    display: grid; place-items: center;
+    box-shadow: 0 2px 7px rgba(192,39,29,.55);
+  }
+  .main { margin: 0 0 5px; font-weight: 600; line-height: 1.35; word-break: break-word; }
+  .sub { margin: 0; font-size: 11px; color: #5a5f68; font-family: Consolas, "Courier New", monospace; word-break: break-all; }
+  .actions { display: flex; justify-content: flex-end; padding: 6px 13px 11px; }
+  .ok {
+    font: inherit; font-size: 12px; padding: 4px 16px;
+    border-radius: 4px; cursor: pointer;
+    border: 1px solid #9a9ea6;
+    background: linear-gradient(180deg,#ffffff,#dcdde0);
+    color: #14161a;
+    transition: border-color .12s, background .12s;
+  }
+  .ok:hover { border-color: #3f86e6; background: linear-gradient(180deg,#fff,#e8f0ff); }
+  .ok:active { background: #d5dff0; }
+
+  /* ===== 某60 广告弹窗 ===== */
+  .window.ad {
+    width: min(324px, 88vw);
+    color: #fff;
+    background: linear-gradient(160deg, var(--c1), var(--c2));
+    box-shadow: 0 18px 42px rgba(0,0,0,.6),
+                0 0 0 1px rgba(255,255,255,.18) inset;
+    --c1:#5a5a5a; --c2:#222;
+    --b1:#fff; --b2:#ddd; --bt:#222;
+  }
+  .window.ad[data-theme="stock"]   { --c1:#ff7a3d; --c2:#b8130b; --b1:#ffe680; --b2:#ffb300; --bt:#6b2a00; }
+  .window.ad[data-theme="browser"] { --c1:#4facfe; --c2:#0b4fa8; --b1:#ffffff; --b2:#cfe4ff; --bt:#0b3d91; }
+  .window.ad[data-theme="zip"]     { --c1:#ffa63d; --c2:#c25000; --b1:#fff0c4; --b2:#ffc247; --bt:#5a2600; }
+  .window.ad[data-theme="guard"]   { --c1:#2fd36a; --c2:#046b2c; --b1:#ffffff; --b2:#c8f5d8; --bt:#065c26; }
+  .window.ad[data-theme="game"]    { --c1:#a45bff; --c2:#5a0f8a; --b1:#ffe66d; --b2:#ff9d00; --bt:#5a2600; }
+
+  .ad-top { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 10px; background: rgba(0,0,0,.2); }
+  .ad-logo {
+    flex: 0 0 auto; width: 20px; height: 20px; border-radius: 5px;
+    display: grid; place-items: center;
+    font-size: 10px; font-weight: 900; letter-spacing: -.3px; color: #fff;
+    background: linear-gradient(180deg,#5ee07a,#12a53d);
+    box-shadow: 0 0 0 1px rgba(255,255,255,.3) inset;
+  }
+  .ad-brand { flex: 1; min-width: 0; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .ad-body { display: flex; gap: 11px; align-items: flex-start; padding: 14px 14px 4px; }
+  .ad-emoji { flex: 0 0 auto; font-size: 30px; line-height: 1; filter: drop-shadow(0 3px 6px rgba(0,0,0,.35)); }
+  .ad-text { flex: 1; min-width: 0; }
+  .ad-head { margin: 0 0 5px; font-size: 14.5px; font-weight: 800; line-height: 1.3; }
+  .ad-desc { margin: 0; font-size: 11.5px; line-height: 1.5; opacity: .92; }
+
+  .ad-actions { display: flex; gap: 8px; padding: 10px 14px 4px; }
+  .ad-primary {
+    flex: 1; min-width: 0;
+    border: none; border-radius: 6px;
+    padding: 9px 10px;
+    font: inherit; font-size: 13px; font-weight: 800;
+    cursor: pointer;
+    color: var(--bt);
+    background: linear-gradient(180deg, var(--b1), var(--b2));
+    box-shadow: 0 3px 10px rgba(0,0,0,.3);
+    transition: filter .12s, transform .08s;
+  }
+  .ad-primary:hover { filter: brightness(1.08); }
+  .ad-primary:active { transform: translateY(1px); }
+  .ad-secondary {
+    flex: 0 0 auto;
+    border: 1px solid rgba(255,255,255,.35);
+    background: rgba(255,255,255,.1);
+    color: #fff;
+    border-radius: 6px;
+    padding: 9px 10px;
+    font: inherit; font-size: 11.5px;
+    cursor: pointer; opacity: .85;
+    transition: background .12s;
+  }
+  .ad-secondary:hover { background: rgba(255,255,255,.2); }
+  .ad-foot { padding: 0 14px 9px; font-size: 10px; opacity: .55; text-align: right; letter-spacing: .3px; }
+
+  /* ===== Flesh 中心弹窗 ===== */
+  .window.flesh {
+    width: min(334px, 88vw);
+    color: #fff;
+    border-radius: 8px;
+    background: linear-gradient(160deg, #ff7a1a, #b8140a);
+    box-shadow: 0 18px 42px rgba(0,0,0,.62), 0 0 0 1px rgba(255,255,255,.2) inset;
+  }
+  .window.flesh[data-theme="update"]  { background: linear-gradient(160deg, #ffa02e, #c24a00); }
+  .window.flesh[data-theme="content"] { background: linear-gradient(160deg, #ff5a2b, #a50d08); }
+
+  .flesh-head { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 10px; background: rgba(0,0,0,.22); }
+  .flesh-logo {
+    flex: 0 0 auto; width: 20px; height: 20px; border-radius: 5px;
+    display: grid; place-items: center;
+    background: #fff; color: #e23b0b; font-size: 13px; font-weight: 900; font-style: italic;
+  }
+  .flesh-brand { flex: 1; min-width: 0; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .flesh-body { padding: 13px 14px 4px; }
+  .flesh-badge {
+    display: inline-block; font-size: 10px; font-weight: 800;
+    padding: 2px 8px; border-radius: 10px; margin-bottom: 8px;
+    background: #ffe14d; color: #7a2600;
+  }
+  .flesh-line { margin: 0 0 7px; font-size: 15px; font-weight: 800; line-height: 1.35; word-break: break-word; }
+  .flesh-desc { margin: 0; font-size: 11.5px; line-height: 1.55; opacity: .92; }
+
+  .flesh-actions { display: flex; gap: 8px; padding: 12px 14px 4px; }
+  .flesh-primary {
+    flex: 1; min-width: 0; border: none; border-radius: 6px; padding: 9px 10px;
+    font: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+    color: #7a2600; background: linear-gradient(180deg, #ffe98a, #ffc21a);
+    box-shadow: 0 3px 12px rgba(0,0,0,.28);
+    transition: filter .12s, transform .08s;
+  }
+  .flesh-primary:hover { filter: brightness(1.07); }
+  .flesh-primary:active { transform: translateY(1px); }
+  .flesh-secondary {
+    flex: 0 0 auto; border: 1px solid rgba(255,255,255,.35);
+    background: rgba(255,255,255,.1); color: #fff; border-radius: 6px;
+    padding: 9px 12px; font: inherit; font-size: 11.5px; cursor: pointer;
+    transition: background .12s;
+  }
+  .flesh-secondary:hover { background: rgba(255,255,255,.2); }
+  .flesh-foot { padding: 0 14px 9px; font-size: 10px; opacity: .6; text-align: right; letter-spacing: .3px; }
+
+  /* ===== 荆山办公 / 百堵网盘 弹窗 ===== */
+  .window.promo {
+    width: min(334px, 88vw);
+    color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 18px 42px rgba(0,0,0,.62), 0 0 0 1px rgba(255,255,255,.2) inset;
+    background: linear-gradient(160deg, var(--p1,#666), var(--p2,#333));
+  }
+  .window.promo[data-brand="jinshan"] { --p1:#ff5b4a; --p2:#b3120a; }
+  .window.promo[data-brand="baidu"]   { --p1:#3aa0ff; --p2:#0b4fa8; }
+
+  .promo-head { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 10px; background: rgba(0,0,0,.22); }
+  .promo-logo {
+    flex: 0 0 auto; width: 20px; height: 20px; border-radius: 5px;
+    display: grid; place-items: center;
+    font-size: 12px; font-weight: 900;
+    background: #fff;
+  }
+  .window.promo[data-brand="jinshan"] .promo-logo { color: #e8382e; }
+  .window.promo[data-brand="baidu"]   .promo-logo { color: #0b4fa8; }
+  .promo-brand { flex: 1; min-width: 0; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .promo-body { padding: 13px 14px 4px; }
+  .promo-badge {
+    display: inline-block; font-size: 10px; font-weight: 800;
+    padding: 2px 8px; border-radius: 10px; margin-bottom: 8px;
+    background: #ffe14d; color: #7a2600;
+  }
+  .promo-line { margin: 0 0 7px; font-size: 15px; font-weight: 800; line-height: 1.35; word-break: break-word; }
+  .promo-desc { margin: 0; font-size: 11.5px; line-height: 1.55; opacity: .92; }
+
+  .promo-actions { display: flex; gap: 8px; padding: 12px 14px 4px; }
+  .promo-primary {
+    flex: 1; min-width: 0; border: none; border-radius: 6px; padding: 9px 10px;
+    font: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+    color: #7a2600; background: linear-gradient(180deg, #ffe98a, #ffc21a);
+    box-shadow: 0 3px 12px rgba(0,0,0,.28);
+    transition: filter .12s, transform .08s;
+  }
+  .promo-primary:hover { filter: brightness(1.07); }
+  .promo-primary:active { transform: translateY(1px); }
+  .promo-secondary {
+    flex: 0 0 auto; border: 1px solid rgba(255,255,255,.35);
+    background: rgba(255,255,255,.1); color: #fff; border-radius: 6px;
+    padding: 9px 12px; font: inherit; font-size: 11.5px; cursor: pointer;
+    transition: background .12s;
+  }
+  .promo-secondary:hover { background: rgba(255,255,255,.2); }
+  .promo-foot { padding: 0 14px 9px; font-size: 10px; opacity: .6; text-align: right; letter-spacing: .3px; }
+
+  /* ===== 开机速度弹窗 ===== */
+  .boot-popup {
+    position: fixed; right: 18px; bottom: 18px;
+    width: min(336px, 90vw);
+    z-index: 900000;
+    background: linear-gradient(180deg,#ffffff,#eef5ef);
+    border-radius: 12px;
+    box-shadow: 0 18px 44px rgba(0,0,0,.5), 0 0 0 1px rgba(0,0,0,.08);
+    overflow: hidden;
+    color: #16321c;
+    animation: bootIn .45s cubic-bezier(.18,1.2,.4,1);
+  }
+  .boot-popup.out { animation: bootOut .4s ease forwards; }
+  @keyframes bootIn { from { opacity:0; transform: translateY(34px) scale(.94); } to { opacity:1; transform:none; } }
+  @keyframes bootOut { to { opacity:0; transform: translateY(24px) scale(.95); } }
+
+  .bp-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 8px 9px 11px;
+    background: linear-gradient(180deg,#3ecf6a,#0f9b3e);
+    color: #fff;
+  }
+  .bp-logo {
+    width: 20px; height: 20px; border-radius: 5px;
+    display: grid; place-items: center;
+    font-size: 10px; font-weight: 900; color: #0f9b3e; background: #fff;
+  }
+  .bp-title { flex: 1; min-width: 0; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bp-close {
+    flex: 0 0 auto; width: 19px; height: 19px; padding: 0;
+    display: grid; place-items: center;
+    border: none; border-radius: 4px;
+    background: rgba(255,255,255,.25); color: #fff;
+    font-size: 11px; cursor: pointer; font-family: inherit;
+  }
+  .bp-close:hover { background: #e81123; }
+
+  .bp-body { padding: 14px 16px 16px; }
+  .bp-sec { display: flex; align-items: baseline; gap: 3px; margin-bottom: 4px; }
+  .bp-num { font-size: 38px; font-weight: 900; color: #0f9b3e; line-height: 1; font-variant-numeric: tabular-nums; }
+  .bp-unit { font-size: 14px; font-weight: 700; color: #0f9b3e; }
+  .bp-line { font-size: 13px; color: #2c3a2e; margin-bottom: 9px; }
+  .bp-line b { color: #d9480f; font-size: 15px; }
+  .bp-bar { height: 9px; border-radius: 5px; background: #dde8de; overflow: hidden; margin-bottom: 8px; }
+  .bp-fill {
+    height: 100%; border-radius: 5px;
+    background: linear-gradient(90deg,#7ee787,#0f9b3e);
+    box-shadow: 0 0 10px rgba(15,155,62,.6);
+    transition: width .8s cubic-bezier(.2,.8,.3,1);
+  }
+  .bp-tip { font-size: 11px; color: #7b8a7d; }
+
+  /* ===== TXCE 反作弊窗口 ===== */
+  .window.txce {
+    width: min(352px, 90vw);
+    background: linear-gradient(180deg,#1b212b,#0e1218);
+    color: #e6eef8;
+    border-radius: 9px;
+    overflow: hidden;
+    box-shadow: 0 22px 54px rgba(0,0,0,.75),
+                0 0 0 1px rgba(226,59,59,.45),
+                0 0 46px rgba(226,59,59,.16);
+  }
+  .txce-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 8px 8px 10px;
+    background: linear-gradient(180deg,#2a1a1c,#1a1013);
+    border-bottom: 1px solid rgba(226,59,59,.35);
+  }
+  .txce-badge {
+    font-size: 10px; font-weight: 900; letter-spacing: .5px;
+    color: #fff; background: #e23b3b; padding: 2px 6px; border-radius: 3px;
+  }
+  .txce-title { flex: 1; min-width: 0; font-size: 12px; font-weight: 700; color: #ffb3b3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .txce-body { display: flex; gap: 11px; padding: 15px 14px 6px; }
+  .txce-warn { flex: 0 0 auto; font-size: 28px; line-height: 1; filter: drop-shadow(0 0 10px rgba(255,60,60,.6)); }
+  .txce-main { margin: 0 0 6px; font-size: 13.5px; font-weight: 700; line-height: 1.4; }
+  .txce-sub { margin: 0; font-size: 11.5px; color: #9fb0c4; line-height: 1.55; }
+  .txce-actions { display: flex; gap: 8px; padding: 12px 14px 14px; }
+  .txce-enable {
+    flex: 1; min-width: 0;
+    border: none; border-radius: 6px; padding: 10px;
+    font: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+    color: #fff; background: linear-gradient(180deg,#ff4d4d,#c81f1f);
+    box-shadow: 0 4px 16px rgba(226,59,59,.45);
+    transition: filter .12s, transform .08s;
+  }
+  .txce-enable:hover { filter: brightness(1.12); }
+  .txce-enable:active { transform: translateY(1px); }
+  .txce-quit {
+    flex: 0 0 auto;
+    border: 1px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.06);
+    color: #c9d5e4; border-radius: 6px; padding: 10px 14px;
+    font: inherit; font-size: 12px; cursor: pointer;
+    transition: background .12s;
+  }
+  .txce-quit:hover { background: rgba(255,255,255,.14); }
+
+  .window.txce.scan { width: min(330px, 88vw); }
+  .txce-spinner {
+    flex: 0 0 auto; width: 26px; height: 26px;
+    border: 3px solid rgba(255,255,255,.15);
+    border-top-color: #ff5a5a;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+
+  /* ===== 某60 冲突弹窗 ===== */
+  .window.s60alert {
+    width: min(362px, 92vw);
+    background: #ffffff;
+    color: #26221c;
+    border-radius: 9px;
+    overflow: hidden;
+    box-shadow: 0 22px 54px rgba(0,0,0,.72), 0 0 0 1px rgba(0,0,0,.1);
+  }
+  .s60-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 8px 8px 10px;
+    background: linear-gradient(180deg,#ff9f1a,#e87800);
+    color: #fff;
+  }
+  .s60-logo {
+    flex: 0 0 auto; width: 20px; height: 20px; border-radius: 5px;
+    display: grid; place-items: center;
+    font-size: 10px; font-weight: 900; color: #e87800; background: #fff;
+  }
+  .s60-title { flex: 1; min-width: 0; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .s60-head .close { background: rgba(255,255,255,.25); }
+  .s60-head .close:hover { background: #e81123; }
+  .s60-body { display: flex; gap: 11px; padding: 15px 14px 6px; }
+  .s60-icon { flex: 0 0 auto; font-size: 26px; line-height: 1; }
+  .s60-main { margin: 0 0 6px; font-size: 14px; font-weight: 800; color: #c03a00; line-height: 1.35; }
+  .s60-sub { margin: 0; font-size: 11.5px; color: #5b5348; line-height: 1.55; }
+  .s60-actions { display: flex; gap: 8px; padding: 12px 14px 14px; }
+  .s60-kill {
+    flex: 1; min-width: 0;
+    border: none; border-radius: 6px; padding: 10px;
+    font: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+    color: #fff; background: linear-gradient(180deg,#ff5a3d,#c92d10);
+    box-shadow: 0 4px 14px rgba(201,45,16,.35);
+    transition: filter .12s, transform .08s;
+  }
+  .s60-kill:hover { filter: brightness(1.08); }
+  .s60-kill:active { transform: translateY(1px); }
+  .s60-allow {
+    flex: 0 0 auto;
+    border: 1px solid #d5cdc0; background: #f7f4ee; color: #5b5348;
+    border-radius: 6px; padding: 10px 14px;
+    font: inherit; font-size: 12px; cursor: pointer;
+    transition: background .12s;
+  }
+  .s60-allow:hover { background: #efe9df; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ===== 红屏 ===== */
+  #redscreen {
+    position: fixed; inset: 0; z-index: 9999900;
+    display: none; place-items: center;
+    background: radial-gradient(circle at 50% 45%, #e60000 0%, #8a0000 55%, #3a0000 100%);
+    color: #fff; text-align: center;
+    font-family: "Microsoft YaHei", system-ui, sans-serif;
+  }
+  #redscreen.show { display: grid; animation: redIn .3s ease; }
+  @keyframes redIn { from { opacity: 0; } to { opacity: 1; } }
+  .red-inner { padding: 20px; }
+  .red-logo {
+    display: inline-block; font-weight: 900; letter-spacing: 5px; font-size: 13px;
+    padding: 5px 14px; border: 2px solid rgba(255,255,255,.65); border-radius: 4px;
+    margin-bottom: 26px; opacity: .9;
+  }
+  #redscreen h1 {
+    font-size: clamp(32px, 7vw, 78px);
+    margin: 0 0 14px; letter-spacing: 8px;
+    text-shadow: 0 0 40px rgba(0,0,0,.55);
+    animation: pulse 1s ease-in-out infinite alternate;
+  }
+  @keyframes pulse { from { opacity: .82; } to { opacity: 1; } }
+  #redscreen .red-mid { font-size: clamp(17px, 3vw, 30px); letter-spacing: 4px; margin: 0 0 12px; font-weight: 700; }
+  #redscreen .red-sub { font-size: clamp(13px, 2.2vw, 20px); letter-spacing: 2px; opacity: .9; margin: 0; }
+
+  /* ===== 蓝屏 ===== */
+  #bsod {
+    position: fixed; inset: 0; z-index: 9999950;
+    display: none;
+    background: #0078d7;
+    color: #fff;
+    padding: 9vh 9vw;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  #bsod.show { display: block; animation: bsodIn .3s ease; }
+  @keyframes bsodIn { from { opacity: 0; } to { opacity: 1; } }
+  .bsod-face { font-size: clamp(58px, 10vw, 112px); line-height: 1; margin-bottom: 26px; font-weight: 300; }
+  .bsod-text { font-size: clamp(15px, 2vw, 22px); line-height: 1.6; max-width: 920px; margin-bottom: 28px; }
+  .bsod-progress { font-size: clamp(14px, 1.9vw, 20px); margin-bottom: 10px; font-variant-numeric: tabular-nums; }
+  .bsod-code { font-size: clamp(11px, 1.3vw, 14px); opacity: .88; margin-top: 34px; }
+  .bsod-hint { font-size: clamp(11px, 1.3vw, 14px); opacity: .75; margin-top: 10px; }
+
+  /* ===== 黑屏重启 ===== */
+  #blackout {
+    position: fixed; inset: 0; z-index: 9999999;
+    display: none; place-items: center;
+    background: #000; color: #d8d8d8;
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  #blackout.show { display: grid; }
+  .bo-inner { text-align: center; }
+  .bo-spinner {
+    width: 34px; height: 34px; margin: 0 auto 16px;
+    border: 3px solid rgba(255,255,255,.2);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  .bo-text { font-size: 14px; letter-spacing: 1px; opacity: .8; }
+
+  /* ===== HUD ===== */
+  .hud {
+    position: fixed; left: 14px; bottom: 14px; z-index: 999999;
+    padding: 9px 13px;
+    border-radius: 9px;
+    background: rgba(8,12,20,.62);
+    border: 1px solid rgba(120,170,255,.22);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #cfd8e6;
+    font-size: 12px; line-height: 1.75;
+    pointer-events: none;
+    user-select: none;
+  }
+  .hud b { color: #6fb0ff; font-variant-numeric: tabular-nums; }
+  .hud .hint { color: #7d879a; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div id="desktop"></div>
+
+<div class="hud">
+  <div>阶段：<b id="phaseName">开机</b></div>
+  <div>活动窗口 <b id="count">0</b> / <b id="max">0</b> · 推广 <b id="adcount">0</b></div>
+  <div>已丢弃最底层窗口 <b id="dropped">0</b> 个</div>
+  <div class="hint">点 ✕ / 按钮可关闭；关键剧情请点“启用反作弊”</div>
+</div>
+
+<!-- 红屏 -->
+<div id="redscreen">
+  <div class="red-inner">
+    <div class="red-logo">TXCE</div>
+    <h1>检测到作弊者</h1>
+    <p class="red-mid">比赛取消</p>
+    <p class="red-sub">所有玩家的输赢皆不计入</p>
+  </div>
+</div>
+
+<!-- 蓝屏 -->
+<div id="bsod">
+  <div class="bsod-face">:(</div>
+  <div class="bsod-text">你的电脑遇到问题，需要重新启动。我们只收集某些错误信息，然后为你重新启动。</div>
+  <div class="bsod-progress"><span id="bsodPct">0</span>% 完成</div>
+  <div class="bsod-code">终止代码：TXCE_CHEAT_DETECTED</div>
+  <div class="bsod-hint">如需了解更多信息，请稍后重试。</div>
+</div>
+
+<!-- 黑屏重启 -->
+<div id="blackout">
+  <div class="bo-inner">
+    <div class="bo-spinner"></div>
+    <div class="bo-text">正在重启…</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============ 全局状态 ============ */
+  const desktop  = document.getElementById('desktop');
+  const countEl  = document.getElementById('count');
+  const maxEl    = document.getElementById('max');
+  const adEl     = document.getElementById('adcount');
+  const dropEl   = document.getElementById('dropped');
+  const phaseEl  = document.getElementById('phaseName');
+
+  const MAX_WINDOWS   = 22;
+  const BASE_INTERVAL = 170;
+  const FADE_MS       = 200;
+
+  let phase = 'boot';
+  let zIndex = 100;
+  let txceZ  = 100000;
+  let dropped = 0;
+  let chaosRunning = false;
+  let bsodInterval = null;
+
+  let scanWin = null;
+  let conflictWin = null;
+  let conflictCount = 0;
+
+  const openWindows = [];
+  const txceWindows = [];
+
+  const PHASE_LABELS = {
+    boot: '开机',
+    game: '游戏启动',
+    scanning: '反作弊扫描',
+    red: '作弊判定',
+    bsod: '系统崩溃',
+    reboot: '重启中'
+  };
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = a => a[(Math.random() * a.length) | 0];
+
+  /* ============ 定时器管理 ============ */
+  const timers = new Set();
+  function later(fn, ms) {
+    const id = setTimeout(() => { timers.delete(id); fn(); }, ms);
+    timers.add(id);
+    return id;
+  }
+  function clearAllTimers() {
+    timers.forEach(id => clearTimeout(id));
+    timers.clear();
+  }
+
+  /* ============ 文案 ============ */
+  const ERRORS = [
+    { t:'错误',            m:'系统找不到指定的文件。',                                   s:'错误代码 0x80070002' },
+    { t:'致命错误',        m:'内存访问冲突，进程已被终止。',                             s:'0xC0000005 / ACCESS_VIOLATION' },
+    { t:'警告',            m:'磁盘空间不足，无法完成此操作。',                           s:'卷 C: 剩余 0 字节' },
+    { t:'运行时错误',      m:'下标超出数组边界。',                                       s:'Run-time error 9' },
+    { t:'连接失败',        m:'服务器没有响应，请稍后重试。',                             s:'ERR_CONNECTION_TIMED_OUT' },
+    { t:'系统提示',        m:'检测到未知设备，驱动程序加载失败。',                       s:'Code 43' },
+    { t:'严重错误',        m:'栈溢出，递归深度超出限制。',                               s:'RangeError: Maximum call stack size exceeded' },
+    { t:'更新失败',        m:'无法安装更新，正在回滚更改……',                            s:'0x80240034' },
+    { t:'权限不足',        m:'你没有权限执行此操作，请联系管理员。',                     s:'EACCES: permission denied' },
+    { t:'System Error',    m:'The operation completed unsuccessfully.',                 s:'Error 0x0000001F' },
+    { t:'Fatal Exception', m:'An unhandled exception occurred in module kernel32.dll.', s:'0x0EEDFADE' },
+    { t:'Access Denied',   m:'You do not have permission to perform this action.',      s:'ERR_ACCESS_DENIED' },
+    { t:'Not Responding',  m:'The program is not responding. Do you want to end it now?', s:'Timeout after 30000ms' },
+    { t:'Out of Memory',   m:'Not enough memory resources to process this command.',    s:'0x8007000E' },
+    { t:'TypeError',       m:'Cannot read properties of undefined (reading "length").', s:'at Object.<anonymous> (main.js:42)' },
+    { t:'Disk Error',      m:'Please insert the disk labeled "SYSTEM" and press any key.', s:'INT 13h — read error' },
+    { t:'Connection Lost', m:'The remote host closed the connection unexpectedly.',     s:'ECONNRESET' },
+    { t:'Kernel Panic',    m:'A fatal hardware error has occurred. The system is halting.', s:'STOP: 0x0000007B' },
+    { t:'解析错误',        m:'意外的标记 "}"，无法解析 JSON。',                          s:'SyntaxError: Unexpected token }' },
+    { t:'资源耗尽',        m:'打开的文件句柄过多，无法继续。',                           s:'EMFILE: too many open files' }
+  ];
+
+  const ADS = [
+    {
+      theme: 'stock', brand: '某60股票 · 今日金股', emoji: '📈',
+      head: '今日金股已更新，免费领取',
+      desc: '某60股票专家在线诊股，3只潜力股限时放送，明日涨停可期！',
+      primary: '免费领取金股', secondary: '不再提醒'
+    },
+    {
+      theme: 'browser', brand: '某60浏览器', emoji: '🌐',
+      head: '将某60浏览器设为默认浏览器？',
+      desc: '极速内核 · 广告拦截 · 安全上网，一键设置即可畅快浏览。',
+      primary: '设为默认', secondary: '以后再说'
+    },
+    {
+      theme: 'zip', brand: '某60压缩', emoji: '🗜️',
+      head: '解压此文件需要会员',
+      desc: '该压缩包为 VIP 专享格式，开通某60压缩会员即可极速解压，首月仅需 9.9 元。',
+      primary: '立即开通会员', secondary: '残忍拒绝'
+    },
+    {
+      theme: 'guard', brand: '某60卫士', emoji: '🛡️',
+      head: '您的电脑存在 3 项安全风险！',
+      desc: '检测到系统漏洞未修复、垃圾文件过多、开机启动项异常，建议立即全面扫描。',
+      primary: '立即修复', secondary: '暂不处理'
+    },
+    {
+      theme: 'game', brand: '某60小游戏', emoji: '🎮',
+      head: '屠龙宝刀，点击就送',
+      desc: '某60小游戏中心独家福利，上线即送满级 VIP，爆率全开，兄弟就等你一个！',
+      primary: '立即进入游戏', secondary: '关闭'
+    }
+  ];
+
+  const FLESH_ADS = [
+    {
+      type: 'update', brand: 'Flesh 中心', badge: '更新提示',
+      head: 'Flesh Player 需要更新',
+      desc: '当前版本已停止服务，部分内容无法播放，请立即更新到最新版。',
+      primary: '立即更新', secondary: '稍后提醒'
+    },
+    {
+      type: 'update', brand: 'Flesh 中心', badge: '安全提醒',
+      head: '检测到 Flesh Player 组件缺失',
+      desc: '播放器核心组件未响应，需要更新后才能继续播放内容。',
+      primary: '一键修复', secondary: '忽略'
+    },
+    {
+      type: 'update', brand: 'Flesh 中心', badge: '重要通知',
+      head: 'Flesh Player 版本过低',
+      desc: '你的播放器版本已不再受支持，请更新以继续使用。',
+      primary: '立即更新', secondary: '稍后提醒'
+    },
+    {
+      type: 'content', brand: 'Flesh 中心 · 民间故事', badge: '热门推荐',
+      head: '民间故事：狗吐人言 全集',
+      desc: '老狗临死前突然开口说话，全村人吓得跪地磕头，真相令人背脊发凉……',
+      primary: '立即播放', secondary: '不感兴趣'
+    },
+    {
+      type: 'content', brand: 'Flesh 中心 · 奇闻', badge: '千万播放',
+      head: '黄鼠狼讨封，小伙喊了一声“像人”',
+      desc: '当晚家里发生的事，让他后悔一辈子。',
+      primary: '立即播放', secondary: '不感兴趣'
+    },
+    {
+      type: 'content', brand: 'Flesh 中心 · 民间故事', badge: '全集完结',
+      head: '黄鼠狼报恩，送来一坛银子',
+      desc: '老汉放生一只黄鼠狼，三天后门口出现一坛银子，打开后所有人都愣住了。',
+      primary: '立即播放', secondary: '不感兴趣'
+    },
+    {
+      type: 'content', brand: 'Flesh 中心 · 深夜故事', badge: '胆小勿入',
+      head: '村口老槐树半夜传出哭声',
+      desc: '村民挖开树根后，看到的东西让所有人沉默了。',
+      primary: '立即播放', secondary: '不感兴趣'
+    },
+    {
+      type: 'content', brand: 'Flesh 中心 · 家庭伦理', badge: '热播中',
+      head: '老太太临终留下一句话，三个儿子当场翻脸',
+      desc: '遗产分配的背后，藏着一个隐瞒了三十年的秘密。',
+      primary: '立即播放', secondary: '不感兴趣'
+    }
+  ];
+
+  const JINSHAN_ADS = [
+    {
+      brand: '荆山办公', badge: 'PDF 提示',
+      head: '请使用荆山办公打开 PDF 文件',
+      desc: '检测到系统默认 PDF 阅读器不是荆山办公，是否立即切换？',
+      primary: '立即切换', secondary: '暂不'
+    },
+    {
+      brand: '荆山办公 · 会员', badge: '会员专享',
+      head: '开通会员，告别所有广告',
+      desc: '当前为免费版，广告无法关闭。开通会员即可享受纯净无广告体验。',
+      primary: '立即开通', secondary: '继续忍受广告'
+    },
+    {
+      brand: '荆山办公 · 模板', badge: '模板库',
+      head: '海量模板，会员随便用',
+      desc: '简历、合同、PPT 模板应有尽有，开通会员即可无限下载。',
+      primary: '开通会员', secondary: '看看就好'
+    },
+    {
+      brand: '荆山办公 · 续费', badge: '会员过期',
+      head: '您的会员已过期',
+      desc: '恢复会员身份，继续享受无广告、云存储、模板全免。',
+      primary: '立即续费', secondary: '暂不需要'
+    },
+    {
+      brand: '荆山办公 · 转换', badge: 'PDF 转换',
+      head: 'PDF 转 Word 需要会员',
+      desc: '该 PDF 文件受保护，开通会员即可转换编辑。',
+      primary: '开通会员', secondary: '取消'
+    }
+  ];
+
+  const BAIDU_ADS = [
+    {
+      brand: '百堵网盘', badge: '空间提醒',
+      head: '电脑磁盘空间不足，建议备份',
+      desc: '检测到 C 盘剩余空间不足 2GB，可将文件备份至百堵网盘释放空间。',
+      primary: '一键备份', secondary: '稍后提醒'
+    },
+    {
+      brand: '百堵网盘 · 会员', badge: '限速提示',
+      head: '下载速度 12KB/s，开通会员提速',
+      desc: '开通超级大会员，下载速度提升至 1MB/s，尊享极速体验。',
+      primary: '开通超级大会员', secondary: '继续等待'
+    },
+    {
+      brand: '百堵网盘 · 扩容', badge: '空间已满',
+      head: '网盘空间已满，请扩容',
+      desc: '开通超级大会员，网盘存储空间增加 1G。',
+      primary: '开通会员', secondary: '清理空间'
+    },
+    {
+      brand: '百堵网盘 · 备份', badge: '重要提醒',
+      head: '重要文件尚未备份',
+      desc: '检测到您的照片、文档未备份，文件丢失风险极高。',
+      primary: '立即备份', secondary: '跳过'
+    },
+    {
+      brand: '百堵网盘 · 限速', badge: '非会员',
+      head: '当前为非会员限速模式',
+      desc: '开通超级大会员，解除限速，下载速度最高可达 1MB/s。',
+      primary: '立即开通', secondary: '忍一忍'
+    }
+  ];
+
+  /* ============ HUD ============ */
+  function isPromo(el) {
+    return el.classList.contains('ad') ||
+           el.classList.contains('flesh') ||
+           el.classList.contains('promo');
+  }
+
+  function updateHUD() {
+    countEl.textContent = openWindows.length;
+    adEl.textContent = openWindows.filter(isPromo).length;
+    dropEl.textContent = dropped;
+    phaseEl.textContent = PHASE_LABELS[phase] || phase;
+  }
+  maxEl.textContent = MAX_WINDOWS;
+
+  /* ============ 通用放置 ============ */
+  function placeRandom(el) {
+    el.style.visibility = 'hidden';
+    el.style.left = '0px';
+    el.style.top  = '0px';
+    desktop.appendChild(el);
+
+    const w = el.offsetWidth, h = el.offsetHeight;
+    const maxX = Math.max(8, window.innerWidth  - w - 8);
+    const maxY = Math.max(8, window.innerHeight - h - 8);
+
+    el.style.left = Math.round(rand(8, maxX)) + 'px';
+    el.style.top  = Math.round(rand(8, maxY)) + 'px';
+    el.style.zIndex = String(++zIndex);
+    el.style.visibility = '';
+
+    openWindows.push(el);
+    updateHUD();
+  }
+
+  function placeCentered(el, z, jitter) {
+    el.style.visibility = 'hidden';
+    el.style.left = '0px';
+    el.style.top  = '0px';
+    desktop.appendChild(el);
+
+    const w = el.offsetWidth, h = el.offsetHeight;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const jx = jitter ? rand(-jitter, jitter) : 0;
+    const jy = jitter ? rand(-jitter, jitter) : 0;
+
+    let x = (vw - w) / 2 + jx;
+    let y = (vh - h) / 2 + jy;
+    x = Math.max(8, Math.min(vw - w - 8, x));
+    y = Math.max(8, Math.min(vh - h - 8, y));
+
+    el.style.left = Math.round(x) + 'px';
+    el.style.top  = Math.round(y) + 'px';
+    el.style.zIndex = String(z);
+    el.style.visibility = '';
+  }
+
+  function bindClose(el) {
+    el.querySelectorAll('.close, .ok, .ad-primary, .ad-secondary').forEach(btn => {
+      btn.addEventListener('click', () => closeWindow(el));
+    });
+  }
+
+  /* ============ 报错窗口 ============ */
+  function createErrorWindow() {
+    const e = pick(ERRORS);
+    const el = document.createElement('div');
+    el.className = 'window err';
+    el.innerHTML =
+      '<div class="titlebar">' +
+        '<span class="dot"></span>' +
+        '<span class="ttl"></span>' +
+        '<button class="close" title="关闭">✕</button>' +
+      '</div>' +
+      '<div class="content">' +
+        '<div class="icon">!</div>' +
+        '<div class="text">' +
+          '<p class="main"></p>' +
+          '<p class="sub"></p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="actions"><button class="ok">确定 OK</button></div>';
+
+    el.querySelector('.ttl').textContent  = e.t;
+    el.querySelector('.main').textContent = e.m;
+    el.querySelector('.sub').textContent  = e.s;
+
+    bindClose(el);
+    placeRandom(el);
+  }
+
+  /* ============ 某60 广告窗口 ============ */
+  function createAdWindow() {
+    const a = pick(ADS);
+    const el = document.createElement('div');
+    el.className = 'window ad';
+    el.dataset.theme = a.theme;
+    el.innerHTML =
+      '<div class="ad-top">' +
+        '<span class="ad-logo">60</span>' +
+        '<span class="ad-brand"></span>' +
+        '<button class="close" title="关闭">✕</button>' +
+      '</div>' +
+      '<div class="ad-body">' +
+        '<div class="ad-emoji"></div>' +
+        '<div class="ad-text">' +
+          '<p class="ad-head"></p>' +
+          '<p class="ad-desc"></p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ad-actions">' +
+        '<button class="ad-primary"></button>' +
+        '<button class="ad-secondary"></button>' +
+      '</div>' +
+      '<div class="ad-foot">广告 · 某60推广</div>';
+
+    el.querySelector('.ad-brand').textContent     = a.brand;
+    el.querySelector('.ad-emoji').textContent     = a.emoji;
+    el.querySelector('.ad-head').textContent      = a.head;
+    el.querySelector('.ad-desc').textContent      = a.desc;
+    el.querySelector('.ad-primary').textContent   = a.primary;
+    el.querySelector('.ad-secondary').textContent = a.secondary;
+
+    bindClose(el);
+    placeRandom(el);
+  }
+
+  /* ============ Flesh 中心窗口 ============ */
+  function createFleshWindow() {
+    const a = pick(FLESH_ADS);
+    const el = document.createElement('div');
+    el.className = 'window flesh';
+    el.dataset.theme = a.type;
+    el.innerHTML =
+      '<div class="flesh-head">' +
+        '<span class="flesh-logo">F</span>' +
+        '<span class="flesh-brand"></span>' +
+        '<button class="close" title="关闭">✕</button>' +
+      '</div>' +
+      '<div class="flesh-body">' +
+        '<span class="flesh-badge"></span>' +
+        '<p class="flesh-line"></p>' +
+        '<p class="flesh-desc"></p>' +
+      '</div>' +
+      '<div class="flesh-actions">' +
+        '<button class="flesh-primary"></button>' +
+        '<button class="flesh-secondary"></button>' +
+      '</div>' +
+      '<div class="flesh-foot">Flesh 中心 · 内容推荐</div>';
+
+    el.querySelector('.flesh-brand').textContent    = a.brand;
+    el.querySelector('.flesh-badge').textContent    = a.badge;
+    el.querySelector('.flesh-line').textContent     = a.head;
+    el.querySelector('.flesh-desc').textContent     = a.desc;
+    el.querySelector('.flesh-primary').textContent  = a.primary;
+    el.querySelector('.flesh-secondary').textContent = a.secondary;
+
+    el.querySelector('.close').addEventListener('click', () => closeWindow(el));
+
+    el.querySelector('.flesh-primary').addEventListener('click', () => {
+      closeWindow(el);
+      if (Math.random() < 0.5) {
+        later(() => { if (chaosRunning) createFleshWindow(); }, 240);
+      }
+    });
+
+    el.querySelector('.flesh-secondary').addEventListener('click', () => {
+      closeWindow(el);
+      if (Math.random() < 0.25) {
+        later(() => { if (chaosRunning) createFleshWindow(); }, 900);
+      }
+    });
+
+    placeRandom(el);
+  }
+
+  /* ============ 荆山办公 / 百堵网盘 通用窗口 ============ */
+  function createPromoWindow(brandKey, data, footText, secondaryReappearChance, onPrimary) {
+    const el = document.createElement('div');
+    el.className = 'window promo';
+    el.dataset.brand = brandKey;
+    el.innerHTML =
+      '<div class="promo-head">' +
+        '<span class="promo-logo"></span>' +
+        '<span class="promo-brand"></span>' +
+        '<button class="close" title="关闭">✕</button>' +
+      '</div>' +
+      '<div class="promo-body">' +
+        '<span class="promo-badge"></span>' +
+        '<p class="promo-line"></p>' +
+        '<p class="promo-desc"></p>' +
+      '</div>' +
+      '<div class="promo-actions">' +
+        '<button class="promo-primary"></button>' +
+        '<button class="promo-secondary"></button>' +
+      '</div>' +
+      '<div class="promo-foot"></div>';
+
+    el.querySelector('.promo-logo').textContent   = brandKey === 'jinshan' ? '荆' : '百';
+    el.querySelector('.promo-brand').textContent  = data.brand;
+    el.querySelector('.promo-badge').textContent  = data.badge;
+    el.querySelector('.promo-line').textContent   = data.head;
+    el.querySelector('.promo-desc').textContent   = data.desc;
+    el.querySelector('.promo-primary').textContent = data.primary;
+    el.querySelector('.promo-secondary').textContent = data.secondary;
+    el.querySelector('.promo-foot').textContent   = footText;
+
+    el.querySelector('.close').addEventListener('click', () => closeWindow(el));
+
+    el.querySelector('.promo-primary').addEventListener('click', () => {
+      closeWindow(el);
+      if (onPrimary) onPrimary();
+    });
+
+    el.querySelector('.promo-secondary').addEventListener('click', () => {
+      closeWindow(el);
+      if (Math.random() < secondaryReappearChance) {
+        later(() => {
+          if (!chaosRunning) return;
+          if (brandKey === 'jinshan') createJinshanWindow();
+          else createBaiduWindow();
+        }, 800 + Math.random() * 600);
+      }
+    });
+
+    placeRandom(el);
+  }
+
+  /* ============ 荆山办公 ============ */
+  function createJinshanWindow() {
+    const a = pick(JINSHAN_ADS);
+    createPromoWindow('jinshan', a, '荆山办公 · 会员推广', 0.3, null);
+  }
+
+  /* ============ 百堵网盘 ============ */
+  function createBaiduWindow() {
+    const a = pick(BAIDU_ADS);
+    createPromoWindow('baidu', a, '百堵网盘 · 会员推广', 0.25, () => {
+      // 点“开通/备份”的彩蛋：有概率弹出支付失败报错
+      if (Math.random() < 0.4) {
+        later(() => {
+          if (!chaosRunning) return;
+          const e = {
+            t:'支付失败',
+            m:'开通超级大会员失败，请检查网络后重试。',
+            s:'ERR_PAYMENT_TIMEOUT'
+          };
+          const el = document.createElement('div');
+          el.className = 'window err';
+          el.innerHTML =
+            '<div class="titlebar">' +
+              '<span class="dot"></span>' +
+              '<span class="ttl"></span>' +
+              '<button class="close" title="关闭">✕</button>' +
+            '</div>' +
+            '<div class="content">' +
+              '<div class="icon">!</div>' +
+              '<div class="text">' +
+                '<p class="main"></p>' +
+                '<p class="sub"></p>' +
+              '</div>' +
+            '</div>' +
+            '<div class="actions"><button class="ok">确定 OK</button></div>';
+          el.querySelector('.ttl').textContent  = e.t;
+          el.querySelector('.main').textContent = e.m;
+          el.querySelector('.sub').textContent  = e.s;
+          bindClose(el);
+          placeRandom(el);
+        }, 600);
+      }
+    });
+  }
+
+  /* ============ 窗口关闭 / 丢弃 ============ */
+  function closeWindow(el) {
+    const i = openWindows.indexOf(el);
+    if (i === -1) return;
+    openWindows.splice(i, 1);
+    destroy(el);
+    updateHUD();
+  }
+
+  function destroy(el) {
+    el.classList.add('dying');
+    el.style.pointerEvents = 'none';
+    setTimeout(() => el.remove(), FADE_MS);
+  }
+
+  function trim() {
+    while (openWindows.length > MAX_WINDOWS) {
+      const bottom = openWindows.shift();
+      dropped++;
+      destroy(bottom);
+    }
+    updateHUD();
+  }
+
+  /* ============ 窗口轰炸 ============ */
+  function chaosTick() {
+    if (!chaosRunning) return;
+
+    const r = Math.random();
+    if (r < 0.24)      createErrorWindow();
+    else if (r < 0.48) createAdWindow();
+    else if (r < 0.68) createFleshWindow();
+    else if (r < 0.84) createJinshanWindow();
+    else               createBaiduWindow();
+
+    trim();
+    later(chaosTick, BASE_INTERVAL + Math.random() * 110);
+  }
+  function startChaos() {
+    if (chaosRunning) return;
+    chaosRunning = true;
+    later(chaosTick, 220);
+  }
+  function stopChaos() { chaosRunning = false; }
+
+  /* ============ 开机速度弹窗 ============ */
+  function showBootPopup() {
+    const old = document.getElementById('bootPopup');
+    if (old) old.remove();
+
+    const secs = 8 + Math.floor(Math.random() * 18);
+    const pct  = 60 + Math.floor(Math.random() * 40);
+
+    const el = document.createElement('div');
+    el.id = 'bootPopup';
+    el.className = 'boot-popup';
+    el.innerHTML =
+      '<div class="bp-head">' +
+        '<span class="bp-logo">60</span>' +
+        '<span class="bp-title">某60安全卫士 · 开机小助手</span>' +
+        '<button class="bp-close" title="关闭">✕</button>' +
+      '</div>' +
+      '<div class="bp-body">' +
+        '<div class="bp-sec"><span class="bp-num">' + secs + '</span><span class="bp-unit">秒</span></div>' +
+        '<div class="bp-line">本次开机速度击败了全国 <b>' + pct + '%</b> 的用户</div>' +
+        '<div class="bp-bar"><div class="bp-fill" style="width:0%"></div></div>' +
+        '<div class="bp-tip">击败的用户越多，说明你的电脑越健康</div>' +
+      '</div>';
+
+    document.body.appendChild(el);
+
+    const fill = el.querySelector('.bp-fill');
+    requestAnimationFrame(() => { fill.style.width = pct + '%'; });
+
+    el.querySelector('.bp-close').addEventListener('click', () => el.remove());
+
+    later(() => {
+      el.classList.add('out');
+      later(() => el.remove(), 450);
+    }, 4200);
+  }
+
+  /* ============ TXCE 反作弊弹窗 ============ */
+  function showTxceWindow() {
+    if (phase !== 'game') return;
+
+    const el = document.createElement('div');
+    el.className = 'window txce';
+    el.innerHTML =
+      '<div class="txce-head">' +
+        '<span class="txce-badge">TXCE</span>' +
+        '<span class="txce-title">反作弊系统 · 游戏安全防护</span>' +
+        '<button class="close" title="关闭">✕</button>' +
+      '</div>' +
+      '<div class="txce-body">' +
+        '<div class="txce-warn">⚠️</div>' +
+        '<div>' +
+          '<p class="txce-main">若不启用 TXCE 反作弊系统，你将无法进行游戏。</p>' +
+          '<p class="txce-sub">检测到游戏正在启动，必须完成反作弊初始化才能进入对局。</p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="txce-actions">' +
+        '<button class="txce-enable">启用反作弊</button>' +
+        '<button class="txce-quit">退出游戏</button>' +
+      '</div>';
+
+    placeCentered(el, ++txceZ, 62);
+    txceWindows.push(el);
+
+    el.querySelector('.close').addEventListener('click', () => closeTxce(el));
+    el.querySelector('.txce-quit').addEventListener('click', () => {
+      closeTxce(el);
+      later(() => { if (phase === 'game') showTxceWindow(); }, 480);
+    });
+    el.querySelector('.txce-enable').addEventListener('click', enableTxce);
+  }
+
+  function closeTxce(el) {
+    const i = txceWindows.indexOf(el);
+    if (i >= 0) txceWindows.splice(i, 1);
+    destroy(el);
+  }
+
+  function removeAllTxce() {
+    const all = txceWindows.slice();
+    txceWindows.length = 0;
+    all.forEach(el => destroy(el));
+  }
+
+  function startTxceSpam() {
+    const tick = () => {
+      if (phase !== 'game') return;
+      if (document.querySelectorAll('.window.txce:not(.scan)').length < 4) {
+        showTxceWindow();
+      }
+      later(tick, 1600);
+    };
+    later(tick, 1600);
+  }
+
+  /* ============ 启用反作弊 → 扫描 → 冲突 ============ */
+  function enableTxce() {
+    if (phase !== 'game') return;
+    phase = 'scanning';
+    updateHUD();
+
+    removeAllTxce();
+    showScanWindow();
+
+    later(() => {
+      if (phase !== 'scanning') return;
+      closeScanWindow();
+      showConflict();
+    }, 1300);
+  }
+
+  function showScanWindow() {
+    const el = document.createElement('div');
+    el.className = 'window txce scan';
+    el.innerHTML =
+      '<div class="txce-head">' +
+        '<span class="txce-badge">TXCE</span>' +
+        '<span class="txce-title">反作弊系统 · 正在初始化</span>' +
+      '</div>' +
+      '<div class="txce-body">' +
+        '<div class="txce-spinner"></div>' +
+        '<div>' +
+          '<p class="txce-main">正在扫描游戏文件…</p>' +
+          '<p class="txce-sub">请勿关闭游戏，扫描完成后方可进入对局。</p>' +
+        '</div>' +
+      '</div>';
+    placeCentered(el, ++txceZ, 0);
+    scanWin = el;
+  }
+
+  function closeScanWindow() {
+    if (!scanWin) return;
+    const el = scanWin;
+    scanWin = null;
+    destroy(el);
+  }
+
+  function showConflict() {
+    if (phase !== 'scanning') return;
+
+    conflictCount++;
+    const second = conflictCount > 1;
+
+    const el = document.createElement('div');
+    el.className = 'window s60alert';
+    el.innerHTML =
+      '<div class="s60-head">' +
+        '<span class="s60-logo">60</span>' +
+        '<span class="s60-title">某60安全卫士 · 实时防护</span>' +
+        '<button class="close" title="关闭">✕</button>' +
+      '</div>' +
+      '<div class="s60-body">' +
+        '<div class="s60-icon">⚠️</div>' +
+        '<div>' +
+          '<p class="s60-main">' + (second ? 'TXCE.EXE 仍在后台扫盘' : 'TXCE.EXE 正在恶意扫盘') + '</p>' +
+          '<p class="s60-sub">' + (second
+            ? '该进程已多次扫描你的磁盘，某60建议立即终止，以保护隐私安全。'
+            : '检测到 TXCE.EXE 正在全盘扫描你的个人文件，疑似存在隐私窃取行为，建议立即关闭该进程。') +
+          '</p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="s60-actions">' +
+        '<button class="s60-kill">关闭 TXCE.EXE</button>' +
+        '<button class="s60-allow">信任并放行</button>' +
+      '</div>';
+
+    placeCentered(el, ++txceZ, 40);
+    conflictWin = el;
+
+    el.querySelector('.close').addEventListener('click', () => {
+      closeConflict();
+      later(() => { if (phase === 'scanning') showConflict(); }, 2000);
+    });
+
+    el.querySelector('.s60-kill').addEventListener('click', () => {
+      closeConflict();
+      triggerRedScreen();
+    });
+
+    el.querySelector('.s60-allow').addEventListener('click', () => {
+      closeConflict();
+      later(() => { if (phase === 'scanning') showConflict(); }, 1800);
+    });
+  }
+
+  function closeConflict() {
+    if (!conflictWin) return;
+    const el = conflictWin;
+    conflictWin = null;
+    destroy(el);
+  }
+
+  /* ============ 红屏 ============ */
+  function triggerRedScreen() {
+    if (phase === 'red' || phase === 'bsod' || phase === 'reboot') return;
+    phase = 'red';
+    updateHUD();
+
+    clearAllTimers();
+    stopChaos();
+
+    openWindows.length = 0;
+    txceWindows.length = 0;
+    scanWin = null;
+    conflictWin = null;
+    Array.from(desktop.querySelectorAll('.window')).forEach(el => el.remove());
+    updateHUD();
+
+    const red = document.getElementById('redscreen');
+    red.classList.add('show');
+
+    later(() => {
+      red.classList.remove('show');
+      showBsod();
+    }, 3200);
+  }
+
+  /* ============ 蓝屏 ============ */
+  function showBsod() {
+    phase = 'bsod';
+    updateHUD();
+
+    const bsod = document.getElementById('bsod');
+    const pctEl = document.getElementById('bsodPct');
+    bsod.classList.add('show');
+
+    let pct = 0;
+    pctEl.textContent = '0';
+
+    bsodInterval = setInterval(() => {
+      pct = Math.min(100, pct + 2 + Math.random() * 6);
+      pctEl.textContent = String(Math.floor(pct));
+
+      if (pct >= 100) {
+        clearInterval(bsodInterval);
+        bsodInterval = null;
+        later(() => {
+          bsod.classList.remove('show');
+          showBlackout();
+        }, 1000);
+      }
+    }, 160);
+  }
+
+  /* ============ 黑屏重启 ============ */
+  function showBlackout() {
+    phase = 'reboot';
+    updateHUD();
+
+    const bo = document.getElementById('blackout');
+    bo.classList.add('show');
+
+    later(() => {
+      bo.classList.remove('show');
+      startBootSequence();
+    }, 1800);
+  }
+
+  /* ============ 开机序列 ============ */
+  function startBootSequence() {
+    phase = 'boot';
+    clearAllTimers();
+    if (bsodInterval) {
+      clearInterval(bsodInterval);
+      bsodInterval = null;
+    }
+    stopChaos();
+
+    openWindows.length = 0;
+    txceWindows.length = 0;
+    scanWin = null;
+    conflictWin = null;
+    conflictCount = 0;
+    Array.from(desktop.querySelectorAll('.window')).forEach(el => el.remove());
+    const oldBp = document.getElementById('bootPopup');
+    if (oldBp) oldBp.remove();
+
+    document.getElementById('redscreen').classList.remove('show');
+    document.getElementById('bsod').classList.remove('show');
+    document.getElementById('blackout').classList.remove('show');
+
+    updateHUD();
+
+    showBootPopup();
+
+    later(() => { if (phase === 'boot') startChaos(); }, 500);
+
+    later(() => {
+      if (phase !== 'boot') return;
+      phase = 'game';
+      updateHUD();
+      showTxceWindow();
+      startTxceSpam();
+    }, 3000);
+  }
+
+  /* ============ 启动 ============ */
+  startBootSequence();
+
+  window.addEventListener('resize', () => {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    openWindows.forEach(el => {
+      const x = Math.min(parseFloat(el.style.left) || 0, Math.max(8, vw - el.offsetWidth - 8));
+      const y = Math.min(parseFloat(el.style.top)  || 0, Math.max(8, vh - el.offsetHeight - 8));
+      el.style.left = x + 'px';
+      el.style.top  = y + 'px';
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>扭 曲 的 空 间</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{
+    height:100%;width:100%;
+    background:#020203;
+    overflow:hidden;
+    cursor:none;
+    user-select:none;
+  }
+  body{
+    font-family:"Songti SC","STSong","SimSun","Noto Serif CJK SC","Source Han Serif SC",serif;
+    color:#6d736c;
+  }
+
+  /* ================= 空间网格 ================= */
+  #field{position:fixed;inset:0;z-index:1;opacity:.9;}
+
+  /* ================= 漂浮幽灵字 ================= */
+  #ghosts{position:fixed;inset:0;z-index:3;pointer-events:none;overflow:hidden;}
+  .ghost{
+    position:absolute;
+    color:#8a938a;
+    white-space:nowrap;
+    text-shadow:0 0 14px rgba(120,150,120,.35);
+    animation:ghostDrift linear forwards;
+    will-change:transform,opacity;
+  }
+  @keyframes ghostDrift{
+    0%  {transform:translate3d(0,0,0) rotate(var(--r0,0deg)) scale(.7);opacity:0;}
+    12% {opacity:var(--o,.1);}
+    75% {opacity:var(--o,.1);}
+    100%{transform:translate3d(var(--dx,0),var(--dy,0),0) rotate(var(--r1,0deg)) scale(1.3);opacity:0;}
+  }
+
+  /* ================= 舞台主文字 ================= */
+  #stage{
+    position:fixed;inset:0;z-index:10;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    pointer-events:none;
+    animation:breath 11s ease-in-out infinite;
+  }
+  @keyframes breath{
+    0%,100%{transform:scale(1) translateY(0);}
+    50%    {transform:scale(1.04) translateY(-7px);}
+  }
+  .title{
+    font-size:clamp(2.4rem,11vw,8.5rem);
+    letter-spacing:.18em;
+    font-weight:400;
+    color:#8e968d;
+    text-shadow:
+      0 0 30px rgba(90,120,90,.28),
+      0 0 90px rgba(70,15,15,.45);
+    filter:url(#warp);
+    will-change:filter,transform;
+  }
+  .subtitle{
+    margin-top:2.4rem;
+    font-size:clamp(.65rem,1.6vw,1rem);
+    letter-spacing:.95em;
+    color:#4c514b;
+    filter:url(#warpSoft);
+    animation:subFlicker 5.5s steps(1) infinite;
+  }
+  @keyframes subFlicker{
+    0%,88%,100%{opacity:.75;}
+    89%{opacity:.15;}
+    90%{opacity:.9;}
+    92%{opacity:.2;}
+    94%{opacity:.85;}
+  }
+
+  /* ================= 角落读数 ================= */
+  .readout{
+    position:fixed;
+    z-index:30;
+    font-family:"Courier New",monospace;
+    font-size:10px;
+    letter-spacing:.22em;
+    color:#5c6b5c;
+    opacity:.22;
+    pointer-events:none;
+    white-space:nowrap;
+    overflow:hidden;
+  }
+  #readoutA{left:18px;bottom:16px;max-width:70vw;}
+  #readoutB{right:18px;top:16px;text-align:right;max-width:70vw;}
+
+  /* ================= 覆盖层 ================= */
+  .grain{
+    position:fixed;inset:-120px;z-index:60;pointer-events:none;
+    opacity:.075;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation:grainShift .32s steps(1) infinite;
+  }
+  @keyframes grainShift{
+    0%  {transform:translate(0,0);}
+    25% {transform:translate(-13px,9px);}
+    50% {transform:translate(10px,-12px);}
+    75% {transform:translate(-8px,-7px);}
+    100%{transform:translate(12px,10px);}
+  }
+
+  .scanlines{
+    position:fixed;inset:0;z-index:61;pointer-events:none;
+    background:repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,.45) 0px,
+      rgba(0,0,0,.45) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    opacity:.5;
+  }
+
+  .vignette{
+    position:fixed;inset:0;z-index:62;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 50%,
+      rgba(0,0,0,0) 22%,
+      rgba(0,0,0,.6) 60%,
+      rgba(0,0,0,.97) 100%);
+    animation:vig 8s ease-in-out infinite;
+  }
+  @keyframes vig{
+    0%,100%{opacity:.9;}
+    50%    {opacity:1;}
+  }
+
+  /* 暗红心跳 */
+  .pulse{
+    position:fixed;inset:-10%;z-index:55;pointer-events:none;
+    background:radial-gradient(circle at 50% 50%,
+      transparent 34%,
+      rgba(80,0,0,.28) 72%,
+      rgba(120,0,0,.55) 100%);
+    animation:pulseBeat 7s ease-in-out infinite;
+  }
+  @keyframes pulseBeat{
+    0%,100%{opacity:.12;transform:scale(1);}
+    50%    {opacity:.5; transform:scale(1.08);}
+  }
+
+  /* 故障负片闪 */
+  #flash{
+    position:fixed;inset:0;z-index:70;pointer-events:none;
+    background:#cfd9cf;
+    mix-blend-mode:difference;
+    opacity:0;
+    transition:opacity .05s linear;
+  }
+  #flash.on{opacity:.5;}
+</style>
+</head>
+<body>
+
+<canvas id="field"></canvas>
+<div id="ghosts"></div>
+
+<div id="stage">
+  <div class="title" id="title">扭曲的空间</div>
+  <div class="subtitle" id="subtitle">空 间 正 在 失 去 意 义</div>
+</div>
+
+<div class="readout" id="readoutA"></div>
+<div class="readout" id="readoutB"></div>
+
+<div class="pulse"></div>
+<div class="grain"></div>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+<div id="flash"></div>
+
+<!-- SVG 扭曲滤镜 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="warp" x="-30%" y="-30%" width="160%" height="160%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.006 0.018"
+                    numOctaves="2" seed="9" result="n">
+        <animate attributeName="baseFrequency" dur="18s" repeatCount="indefinite"
+          values="0.006 0.018;0.018 0.005;0.003 0.025;0.012 0.009;0.006 0.018"/>
+      </feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="28"
+                         xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+
+    <filter id="warpSoft" x="-25%" y="-25%" width="150%" height="150%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.03"
+                    numOctaves="1" seed="4" result="n2">
+        <animate attributeName="baseFrequency" dur="9s" repeatCount="indefinite"
+          values="0.012 0.03;0.028 0.008;0.012 0.03"/>
+      </feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="n2" scale="13"
+                         xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
+
+<script>
+/* =====================================================
+   0. 乱码字符生成器
+   ===================================================== */
+const GHOST_POOL =
+  '空虚无寂影噬裂溃畸暗瞳骨隙熵腐蠕坍缩妄忘却窒闭重错位残响失真迷魇瘴蚀呓谵';
+
+function randGlyph(){
+  const r = Math.random();
+  if (r < 0.42) return GHOST_POOL[(Math.random() * GHOST_POOL.length) | 0];
+  if (r < 0.68) return String.fromCodePoint(0x4E00 + ((Math.random() * 0x51FF) | 0));
+  if (r < 0.84) return String.fromCodePoint(0x3400 + ((Math.random() * 0x1AFF) | 0));
+  if (r < 0.94) return String.fromCodePoint(0x2E80 + ((Math.random() * 0x60)   | 0));
+  return String.fromCodePoint(0xF900 + ((Math.random() * 0x200) | 0));
+}
+
+/* =====================================================
+   1. 空间扭曲网格
+   ===================================================== */
+const cvs = document.getElementById('field');
+const ctx = cvs.getContext('2d');
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+let W = 0, H = 0;
+
+function resize(){
+  W = window.innerWidth;
+  H = window.innerHeight;
+  cvs.width  = W * DPR;
+  cvs.height = H * DPR;
+  cvs.style.width  = W + 'px';
+  cvs.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+resize();
+window.addEventListener('resize', resize);
+
+let mx = W / 2, my = H / 2, tmx = W / 2, tmy = H / 2;
+window.addEventListener('mousemove', e => { tmx = e.clientX; tmy = e.clientY; });
+window.addEventListener('touchmove', e => {
+  if (e.touches[0]) { tmx = e.touches[0].clientX; tmy = e.touches[0].clientY; }
+}, { passive: true });
+
+// 预生成颜色表，避免每帧字符串拼接
+const PALETTE = [];
+for (let i = 0; i < 24; i++) {
+  PALETTE.push('rgba(126,150,128,' + (0.02 + (i / 23) * 0.52).toFixed(3) + ')');
+}
+
+function drawField(now){
+  requestAnimationFrame(drawField);
+
+  mx += (tmx - mx) * 0.06;
+  my += (tmy - my) * 0.06;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // 引力中心缓慢游走
+  const cx = W * 0.5 + Math.sin(now * 0.00009) * W * 0.20;
+  const cy = H * 0.5 + Math.cos(now * 0.00013) * H * 0.20;
+
+  const sp = 42;
+
+  for (let gx = -sp; gx < W + sp; gx += sp){
+    for (let gy = -sp; gy < H + sp; gy += sp){
+
+      const dx = gx - cx, dy = gy - cy;
+      const d  = Math.sqrt(dx * dx + dy * dy) || 1;
+      const ang = Math.atan2(dy, dx);
+
+      // 中心引力井
+      const well = 5400 / (d + 150);
+      // 空间涟漪
+      const ripple = Math.sin(d * 0.014 - now * 0.0012) * Math.min(d * 0.055, 28);
+
+      // 鼠标挤压
+      const mdx = gx - mx, mdy = gy - my;
+      const md  = Math.sqrt(mdx * mdx + mdy * mdy) || 1;
+      const mf  = Math.max(0, 1 - md / 300);
+      const push = mf * mf * 48;
+
+      const nx = gx + Math.cos(ang) * (ripple - well) + (mdx / md) * push;
+      const ny = gy + Math.sin(ang) * (ripple - well) + (mdy / md) * push;
+
+      const bend = Math.sqrt((nx - gx) ** 2 + (ny - gy) ** 2);
+      let idx = (bend * 0.9) | 0;
+      if (idx > 23) idx = 23;
+
+      const s = 1 + Math.min(2.2, bend * 0.028);
+      ctx.fillStyle = PALETTE[idx];
+      ctx.fillRect(nx, ny, s, s);
+    }
+  }
+}
+requestAnimationFrame(drawField);
+
+/* =====================================================
+   2. 主标题：字符抽搐腐化
+   ===================================================== */
+const BASE = '扭曲的空间';
+const titleEl = document.getElementById('title');
+let chars = BASE.split('');
+
+function renderTitle(){
+  titleEl.textContent = chars.join('');
+}
+
+function corruptOnce(){
+  const n = Math.random() < 0.28 ? 2 : 1;
+  const idx = [];
+  for (let i = 0; i < n; i++){
+    idx.push((Math.random() * chars.length) | 0);
+  }
+  idx.forEach(i => { chars[i] = randGlyph(); });
+  renderTitle();
+
+  const life = 70 + Math.random() * 540;
+  setTimeout(() => {
+    idx.forEach(i => { chars[i] = BASE[i]; });
+    renderTitle();
+  }, life);
+}
+
+(function titleLoop(){
+  const wait = 420 + Math.random() * 2500;
+  setTimeout(() => { corruptOnce(); titleLoop(); }, wait);
+})();
+
+// 偶尔整体抽搐位移
+setInterval(() => {
+  if (Math.random() < 0.16){
+    const tx = (Math.random() - 0.5) * 12;
+    const ty = (Math.random() - 0.5) * 10;
+    titleEl.style.transform = `translate(${tx}px, ${ty}px) skewX(${(Math.random()-0.5)*3}deg)`;
+    setTimeout(() => { titleEl.style.transform = ''; }, 80 + Math.random() * 80);
+  }
+}, 700);
+
+/* =====================================================
+   3. 漂浮幽灵字
+   ===================================================== */
+const ghostLayer = document.getElementById('ghosts');
+const MAX_GHOSTS = 70;
+let ghostCount = 0;
+
+function spawnGhost(){
+  if (ghostCount >= MAX_GHOSTS) return;
+  ghostCount++;
+
+  const el = document.createElement('div');
+  el.className = 'ghost';
+  el.textContent = Math.random() < 0.22
+    ? randGlyph() + randGlyph()
+    : randGlyph();
+
+  const size = 9 + Math.random() * Math.random() * 120;
+  const dur  = 7 + Math.random() * 16;
+
+  el.style.fontSize = size.toFixed(1) + 'px';
+  el.style.left = (Math.random() * 112 - 6) + 'vw';
+  el.style.top  = (Math.random() * 112 - 6) + 'vh';
+  el.style.setProperty('--o',  (0.04 + Math.random() * 0.22).toFixed(3));
+  el.style.setProperty('--dx', ((Math.random() - 0.5) * 280).toFixed(0) + 'px');
+  el.style.setProperty('--dy', (-40 - Math.random() * 240).toFixed(0) + 'px');
+  el.style.setProperty('--r0', ((Math.random() - 0.5) * 45).toFixed(1) + 'deg');
+  el.style.setProperty('--r1', ((Math.random() - 0.5) * 100).toFixed(1) + 'deg');
+  el.style.animationDuration = dur.toFixed(1) + 's';
+
+  ghostLayer.appendChild(el);
+
+  setTimeout(() => {
+    el.remove();
+    ghostCount--;
+  }, dur * 1000 + 250);
+}
+
+// 预热一批
+for (let i = 0; i < 26; i++) setTimeout(spawnGhost, i * 90);
+setInterval(spawnGhost, 260);
+
+/* =====================================================
+   4. 角落读数
+   ===================================================== */
+const readoutA = document.getElementById('readoutA');
+const readoutB = document.getElementById('readoutB');
+
+function randomString(len){
+  let s = '';
+  for (let i = 0; i < len; i++) s += randGlyph();
+  return s;
+}
+
+setInterval(() => {
+  readoutA.textContent = randomString(22);
+}, 130);
+
+setInterval(() => {
+  const sec = (Math.random() * 9999).toFixed(4);
+  readoutB.textContent = randomString(14) + '  ' + sec;
+}, 210);
+
+/* =====================================================
+   5. 故障闪屏
+   ===================================================== */
+const flash = document.getElementById('flash');
+
+function glitchBurst(){
+  flash.classList.add('on');
+  setTimeout(() => flash.classList.remove('on'), 55 + Math.random() * 90);
+  setTimeout(glitchBurst, 2600 + Math.random() * 8500);
+}
+setTimeout(glitchBurst, 2200);
+</script>
+</body>
+</html>
