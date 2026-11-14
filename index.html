@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>未命名的</title>
+<style>
+  /* ================= 基础暗黑重置 ================= */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background-color: #121212;
+    color: #e5e7eb;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  a { text-decoration: none; color: inherit; }
+
+  /* ================= 顶部导航 ================= */
+  .header-wrapper { background-color: #1f1f1f; border-bottom: 1px solid #333; }
+  .main-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 20px; height: 65px; max-width: 1200px; margin: 0 auto;
+  }
+  .logo { font-size: 22px; font-weight: 800; display: flex; align-items: center; cursor: pointer; }
+  .logo-text-white { color: #fff; }
+  .logo-text-orange { background-color: #f9a31a; color: #000; padding: 2px 8px; border-radius: 4px; margin-left: 6px; }
+  .top-links { display: flex; gap: 20px; font-size: 13px; color: #888; }
+  .top-links a:hover { color: #f9a31a; }
+
+  /* ================= 二级导航 ================= */
+  .sub-nav {
+    display: flex; background-color: #1f1f1f; border-bottom: 1px solid #333;
+    padding: 0 20px; max-width: 1200px; margin: 0 auto;
+  }
+  .nav-item {
+    padding: 14px 24px; font-weight: 600; color: #aaa;
+    border-bottom: 3px solid transparent; transition: all 0.2s;
+  }
+  .nav-item.active { color: #fff; border-bottom: 3px solid #f9a31a; }
+
+  /* ================= 主体容器 ================= */
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px; }
+
+
+  /* ================= 卡片网格 (Grid) ================= */
+  .post-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 24px;
+  }
+
+  /* ================= 掘金风卡片 ================= */
+  .post-card {
+    background-color: #1e1e1e; /* 稍微亮一点的卡片底色 */
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 20px;
+    position: relative;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    display: flex;
+    flex-direction: column;
+  }
+  .post-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.8);
+    border-color: #555;
+  }
+
+  /* 卡片头部的标签 */
+  .card-tag {
+    display: inline-block;
+    background-color: rgba(249, 163, 26, 0.15);
+    color: #f9a31a;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-bottom: 14px;
+    align-self: flex-start;
+  }
+
+  /* 卡片标题和内容 */
+  .card-title {
+    font-size: 17px; font-weight: 700; color: #fff;
+    margin-bottom: 12px; line-height: 1.4;
+  }
+  .card-content { color: #9ca3af; font-size: 14px; flex-grow: 1; }
+  .card-content a { color: #f9a31a; text-decoration: underline; }
+  /* 底部 */
+  footer {
+    text-align: center; padding: 40px 20px; color: #555;
+    font-size: 13px; border-top: 1px solid #333; margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+
+
+  <!-- 主 Header -->
+  <header class="header-wrapper">
+    <div class="main-header">
+      <div class="logo">
+        <span class="logo-text-white">PERSONAL</span>
+        <span class="logo-text-orange">PAGE</span>
+      </div>
+      <div class="top-links">
+        <a href="#">搜索</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- 导航菜单 -->
+  <nav class="sub-nav">
+    <div class="nav-item active">首页</div>
+    <div class="nav-item">wwwww</div>
+    <div class="nav-item">wwwww</div>
+  </nav>
+
+  <!-- 主体内容 -->
+  <div class="container">
+    
+    
+
+    <!-- 卡片网格 -->
+    <div class="post-grid">
+
+      <!-- 卡片1：关于我 -->
+      <div class="post-card">
+        <span class="card-tag">LIFE</span>
+        <div class="card-title">关于我：一个普通九年级学生</div>
+        <div class="card-content">
+          这只是一次尝试，先放着。<br>
+          以后可能会写点东西，也可能不会。<br><br>
+          <strong>特长：</strong>empty<br>
+          <strong>成就：</strong>empty
+        </div>
+      </div>
+
+      <!-- 卡片2：玄学控制台 -->
+      <div class="post-card">
+        <span class="card-tag">TOOLS</span>
+        <div class="card-title">控制台</div>
+        <div class="card-content" style="margin-bottom: 15px;">
+          empty
+        </div>
+        
+
+      </div>
+
+
+
+      <!-- 卡片4： -->
+      <div class="post-card">
+        <span class="card-tag">LINKS</span>
+        <div class="card-title">赛博遗迹巡游</div>
+        <div class="card-content" style="line-height: 2.2;">
+          <a href="#">一个链接</a><br>
+          <a href="#">另一个链接</a><br>
+        </div>
+      </div>
+	  <div class="post-card">
+        <span class="card-tag">联系我</span>
+        <div class="card-title">联系我</div>
+        <div class="card-content" style="line-height: 2.2;">
+		  <a>EMAIL:you@example.com</a><br>
+          <a href="#">DOUYIN</a><br>
+          <a href="#">BILIBILI</a><br>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>
+    made by AI ＆ BUG<br>
+	Since November 7th, 2026
+  </footer>
+
+<script>
+  
+</script>
+</body>
+</html>
